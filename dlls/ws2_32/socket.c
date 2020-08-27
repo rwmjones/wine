@@ -1132,6 +1132,14 @@ int WINAPI bind( SOCKET s, const struct sockaddr *addr, int len )
             }
             break;
 
+        case AF_UNIX:
+            if (len < sizeof(struct sockaddr_un))
+            {
+                SetLastError( WSAEFAULT );
+                return -1;
+            }
+            break;
+
         case AF_IPX:
             if (len < sizeof(struct sockaddr_ipx))
             {

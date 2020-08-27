@@ -137,6 +137,7 @@ static const int nameinfo_flag_map[][2] =
 static const int family_map[][2] =
 {
     MAP( AF_UNSPEC ),
+    MAP( AF_UNIX ),
     MAP( AF_INET ),
     MAP( AF_INET6 ),
 #ifdef AF_IPX

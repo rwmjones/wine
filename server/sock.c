@@ -46,6 +46,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/ioctl.h>
 #ifdef HAVE_SYS_FILIO_H
 # include <sys/filio.h>
@@ -92,6 +93,7 @@
 #include "winsock2.h"
 #include "ws2tcpip.h"
 #include "wsipx.h"
+#include "afunix.h"
 #include "af_irda.h"
 #include "wine/afd.h"
 #include "wine/rbtree.h"
@@ -123,6 +125,7 @@ union unix_sockaddr
     struct sockaddr addr;
     struct sockaddr_in in;
     struct sockaddr_in6 in6;
+    struct sockaddr_un sun;
 #ifdef HAS_IPX
     struct sockaddr_ipx ipx;
 #endif
@@ -514,6 +517,16 @@ static int sockaddr_from_unix( const union unix_sockaddr *uaddr, struct WS_socka
         return sizeof(win);
     }
 
+    case AF_UNIX:
+    {
+        struct WS_sockaddr_un wun = {0};
+
+        if (wsaddrlen < sizeof(wun)) return -1;
+        wun.sun_family = WS_AF_UNIX;
+        memcpy(&wun.sun_path, uaddr->sun.sun_path, sizeof(uaddr->sun.sun_path));
+        return sizeof(wun);
+    }
+
 #ifdef HAS_IPX
     case AF_IPX:
     {
@@ -587,6 +600,24 @@ static socklen_t sockaddr_to_unix( const struct WS_sockaddr *wsaddr, int wsaddrl
         uaddr->in6.sin6_scope_id = win.sin6_scope_id;
 #endif
         return sizeof(uaddr->in6);
+    }
+
+    case WS_AF_UNIX: {
+        struct WS_sockaddr_un wun = {0};
+        size_t len;
+
+        if (wsaddrlen<sizeof(struct WS_sockaddr_un))
+            return 0;
+        memcpy( &wun, wsaddr, sizeof(wun) );
+        uaddr->sun.sun_family = AF_UNIX;
+        /* Note that in Win32 sun_path is "a null-terminated UTF-8
+         * file system path".
+         */
+        len = strlen(wun.sun_path);
+        if (len > sizeof(uaddr->sun.sun_path))
+            return 0;
+        memcpy(&uaddr->sun.sun_path, wun.sun_path, len);
+        return sizeof(uaddr->sun);
     }
 
 #ifdef HAS_IPX
@@ -1749,6 +1780,7 @@ static int get_unix_family( int family )
 {
     switch (family)
     {
+        case WS_AF_UNIX: return AF_UNIX;
         case WS_AF_INET: return AF_INET;
         case WS_AF_INET6: return AF_INET6;
 #ifdef HAS_IPX

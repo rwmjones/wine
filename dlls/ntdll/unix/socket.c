@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <sys/un.h>
 #ifdef HAVE_IFADDRS_H
 # include <ifaddrs.h>
 #endif
@@ -76,6 +77,7 @@
 #include "mstcpip.h"
 #include "ws2tcpip.h"
 #include "wsipx.h"
+#include "afunix.h"
 #include "af_irda.h"
 #include "wine/afd.h"
 
@@ -99,6 +101,7 @@ union unix_sockaddr
     struct sockaddr addr;
     struct sockaddr_in in;
     struct sockaddr_in6 in6;
+    struct sockaddr_un sun;
 #ifdef HAS_IPX
     struct sockaddr_ipx ipx;
 #endif
@@ -232,6 +235,24 @@ static socklen_t sockaddr_to_unix( const struct WS_sockaddr *wsaddr, int wsaddrl
         return sizeof(uaddr->in6);
     }
 
+    case WS_AF_UNIX: {
+        struct WS_sockaddr_un wun = {0};
+        size_t len;
+
+        if (wsaddrlen<sizeof(struct WS_sockaddr_un))
+            return 0;
+        memcpy( &wun, wsaddr, sizeof(wun) );
+        uaddr->sun.sun_family = AF_UNIX;
+        /* Note that in Win32 sun_path is "a null-terminated UTF-8
+         * file system path".
+         */
+        len = strlen(wun.sun_path);
+        if (len > sizeof(uaddr->sun.sun_path))
+            return 0;
+        memcpy(&uaddr->sun.sun_path, wun.sun_path, len);
+        return sizeof(uaddr->sun);
+    }
+
 #ifdef HAS_IPX
     case WS_AF_IPX:
     {
@@ -327,6 +348,20 @@ static int sockaddr_from_unix( const union unix_sockaddr *uaddr, struct WS_socka
 #endif
         memcpy( wsaddr, &win, sizeof(win) );
         return sizeof(win);
+    }
+
+    case AF_UNIX:
+    {
+        struct WS_sockaddr_un wun = {0};
+
+        if (wsaddrlen < sizeof(wun)) return -1;
+        wun.sun_family = WS_AF_UNIX;
+        /* XXX We might want to translate the Unix path to an NT path
+         * here, or maybe not depending on whether we expect the
+         * caller would need to open this path or simply display it.
+         */
+        memcpy(&wun.sun_path, uaddr->sun.sun_path, sizeof(uaddr->sun.sun_path));
+        return sizeof(wun);
     }
 
 #ifdef HAS_IPX
