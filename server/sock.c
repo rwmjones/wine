@@ -932,6 +932,7 @@ static int get_unix_family( int family )
 {
     switch (family)
     {
+        case WS_AF_UNIX: return AF_UNIX;
         case WS_AF_INET: return AF_INET;
         case WS_AF_INET6: return AF_INET6;
 #ifdef HAS_IPX

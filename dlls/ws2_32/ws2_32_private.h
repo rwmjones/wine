@@ -122,6 +122,8 @@
 # include <sys/time.h>
 #endif
 
+#include <sys/un.h>
+
 #define NONAMELESSUNION
 #define NONAMELESSSTRUCT
 #include "ntstatus.h"
@@ -141,6 +143,7 @@
 #include "wshisotp.h"
 #include "mstcpip.h"
 #include "af_irda.h"
+#include "afunix.h"
 #include "winnt.h"
 #define USE_WC_PREFIX   /* For CMSG_DATA */
 #include "iphlpapi.h"

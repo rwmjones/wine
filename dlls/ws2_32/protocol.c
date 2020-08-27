@@ -71,6 +71,7 @@ static const int ws_eai_map[][2] =
 static const int ws_af_map[][2] =
 {
     MAP_OPTION( AF_UNSPEC ),
+    MAP_OPTION( AF_UNIX ),
     MAP_OPTION( AF_INET ),
     MAP_OPTION( AF_INET6 ),
 #ifdef HAS_IPX

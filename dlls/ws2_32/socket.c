@@ -1599,6 +1599,7 @@ static inline BOOL supported_pf(int pf)
 {
     switch (pf)
     {
+    case WS_AF_UNIX:
     case WS_AF_INET:
     case WS_AF_INET6:
         return TRUE;
@@ -1688,6 +1689,36 @@ unsigned int ws_sockaddr_ws2u( const struct WS_sockaddr *wsaddr, int wsaddrlen,
         memcpy(&uin->sin_addr,&win->sin_addr,4); /* 4 bytes = 32 address bits */
         break;
     }
+    case WS_AF_UNIX: {
+        struct sockaddr_un* un = (struct sockaddr_un *)uaddr;
+        const struct WS_sockaddr_un* wun = (const struct WS_sockaddr_un*)wsaddr;
+        int num;
+        LPWSTR win_path;
+        char *unix_path;
+
+        if (wsaddrlen<sizeof(struct WS_sockaddr_un))
+            return 0;
+        uaddrlen = sizeof(struct sockaddr_un);
+        memset( uaddr, 0, uaddrlen );
+        un->sun_family = AF_UNIX;
+        /* Note that in Win32 sun_path is "a null-terminated UTF-8
+         * file system path".  We have to translate to a Unix path.
+         */
+        num = MultiByteToWideChar(CP_UTF8, 0, wun->sun_path, -1, NULL, 0);
+        win_path = HeapAlloc(GetProcessHeap(), 0, num * sizeof(WCHAR));
+        if (win_path == NULL)
+            return 0;
+        MultiByteToWideChar(CP_UTF8, 0, wun->sun_path, -1, win_path, num);
+        unix_path = wine_get_unix_file_name(win_path);
+        heap_free(win_path);
+        if (!unix_path || strlen(unix_path) > sizeof(un->sun_path)) {
+            heap_free(unix_path);
+            return 0;
+        }
+        memcpy(&un->sun_path, unix_path, strlen(unix_path));
+        heap_free(unix_path);
+        break;
+    }
 #ifdef HAS_IRDA
     case WS_AF_IRDA: {
         struct sockaddr_irda *uin = (struct sockaddr_irda *)uaddr;
@@ -1771,6 +1802,12 @@ static BOOL is_sockaddr_bound(const struct sockaddr *uaddr, int uaddrlen)
             static const struct sockaddr_in emptyAddr;
             const struct sockaddr_in *in = (const struct sockaddr_in*) uaddr;
             return in->sin_port || memcmp(&in->sin_addr, &emptyAddr.sin_addr, sizeof(struct in_addr));
+        }
+        case AF_UNIX:
+        {
+            static const struct sockaddr_un emptyAddr;
+            const struct sockaddr_un *un = (const struct sockaddr_un*) uaddr;
+            return memcmp(&un->sun_path, &emptyAddr.sun_path, sizeof(un->sun_path));
         }
         case AF_UNSPEC:
             return FALSE;
@@ -1894,6 +1931,21 @@ int ws_sockaddr_u2ws(const struct sockaddr *uaddr, struct WS_sockaddr *wsaddr, i
         memcpy(&win->sin_addr,&uin->sin_addr,4); /* 4 bytes = 32 address bits */
         memset(win->sin_zero, 0, 8); /* Make sure the null padding is null */
         *wsaddrlen = sizeof(struct WS_sockaddr_in);
+        return 0;
+    }
+    case AF_UNIX: {
+        const struct sockaddr_un* un = (const struct sockaddr_un*)uaddr;
+        struct WS_sockaddr_un* wun = (struct WS_sockaddr_un*)wsaddr;
+
+        if (*wsaddrlen < sizeof(struct WS_sockaddr_un))
+            return -1;
+        wun->sun_family = WS_AF_INET;
+        /* XXX We might want to translate the Unix path to an NT path
+         * here, or maybe not depending on whether we expect the
+         * caller would need to open this path or simply display it.
+         */
+        memcpy(&wun->sun_path, &un->sun_path, sizeof(wun->sun_path));
+        *wsaddrlen = sizeof(struct WS_sockaddr_un);
         return 0;
     }
     case AF_UNSPEC: {
